@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roue Croque-Carotte</title>
+<style>
+  :root {
+    --bg: #eaf6d8;
+    --card: #ffffff;
+    --text: #3b2a14;
+    --muted: #7a6a50;
+    --accent: #f08a24;
+    --accent-dark: #c96a12;
+    --seg-a: #fbe27a;
+    --seg-b: #f6d35a;
+    --rim: #6b8f2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1d2614; --card: #2a3420; --text: #f4ecd8; --muted: #c4b898;
+      --rim: #9cc24a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 16px;
+  }
+  h1 { margin: 8px 0 4px; font-size: 1.8rem; letter-spacing: .5px; }
+  .sub { margin: 0 0 16px; color: var(--muted); text-align: center; }
+  .wheel-wrap { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; }
+  #wheel { width: 100%; height: 100%; transition: transform 4.2s cubic-bezier(.17,.67,.12,1); }
+  .pointer {
+    position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+    width: 0; height: 0; border-left: 22px solid transparent; border-right: 22px solid transparent;
+    border-bottom: 44px solid var(--accent); filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); z-index: 2;
+  }
+  .hub {
+    position: absolute; inset: 0; margin: auto; width: 16%; height: 16%; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffb36b, var(--accent-dark));
+    border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); z-index: 2;
+  }
+  button {
+    margin-top: 28px; font-size: 1.3rem; font-weight: 700; padding: 14px 40px; border: none;
+    border-radius: 999px; background: var(--accent); color: #fff; cursor: pointer;
+    box-shadow: 0 4px 0 var(--accent-dark); touch-action: manipulation;
+  }
+  button:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--accent-dark); }
+  button:disabled { opacity: .6; cursor: default; }
+  .result {
+    margin-top: 20px; min-height: 92px; width: 100%; max-width: 420px; background: var(--card);
+    border-radius: 16px; padding: 14px 18px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  .result .big { font-size: 1.5rem; font-weight: 800; }
+  .result .hint { color: var(--muted); margin-top: 4px; }
+  .players { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; justify-content: center; }
+  .player {
+    padding: 6px 14px; border-radius: 999px; font-weight: 700; color: #fff; opacity: .45;
+    border: 3px solid transparent;
+  }
+  .player.active { opacity: 1; border-color: var(--text); }
+  label.small { margin-top: 12px; color: var(--muted); font-size: .9rem; }
+  select { font-size: .9rem; margin-left: 6px; }
+</style>
+</head>
+<body>
+  <h1>🥕 Croque-Carotte</h1>
+  <p class="sub">Tourne la roue pour savoir ce que fait ton lapin !</p>
+
+  <div class="wheel-wrap">
+    <svg id="wheel" viewBox="-110 -110 220 220" aria-label="Roue"></svg>
+    <div class="hub"></div>
+    <div class="pointer"></div>
+  </div>
+
+  <button id="spin">Tourner !</button>
+
+  <div class="result" id="result" aria-live="polite">
+    <div class="big">Prêts ?</div>
+    <div class="hint">Le premier lapin qui atteint la carotte gagne.</div>
+  </div>
+
+  <label class="small">Joueurs
+    <select id="count">
+      <option value="2">2</option><option value="3">3</option><option value="4" selected>4</option>
+    </select>
+  </label>
+  <div class="players" id="players"></div>
+
+<script>
+  // Cases de la roue. Ajuste cette liste si ta roue est différente.
+  const SEGMENTS = [
+    { icon: "●",       label: "1 case",    big: "Avance de 1 case",  hint: "Saute d'une case avec un de tes lapins." },
+    { icon: "🌉",      label: "Pont",      big: "Le pont suspendu !", hint: "Déplace le pont suspendu sur l'autre pont cassé." },
+    { icon: "●●",      label: "2 cases",   big: "Avance de 2 cases", hint: "Saute de deux cases avec un de tes lapins." },
+    { icon: "🐹",      label: "Taupe",     big: "La taupe !",        hint: "Attention, la taupe pousse un lapin… dans un trou ?" },
+    { icon: "●●●",     label: "3 cases",   big: "Avance de 3 cases", hint: "Saute de trois cases avec un de tes lapins." },
+    { icon: "🪵",      label: "Planches",  big: "Les planches !",    hint: "Déplace une planche pour boucher le trou de ton choix." },
+    { icon: "●",       label: "1 case",    big: "Avance de 1 case",  hint: "Saute d'une case avec un de tes lapins." },
+    { icon: "●●",      label: "2 cases",   big: "Avance de 2 cases", hint: "Saute de deux cases avec un de tes lapins." },
+  ];
+  const PLAYERS = [
+    { name: "Jaune", color: "#e0b400" }, { name: "Rose", color: "#d6336c" },
+    { name: "Bleu", color: "#1c6fd6" },  { name: "Violet", color: "#7b2fb5" },
+  ];
+
+  const svg = document.getElementById("wheel");
+  const NS = "http://www.w3.org/2000/svg";
+  const n = SEGMENTS.length, step = 360 / n, R = 100;
+  const pt = (deg, r) => { const a = (deg - 90) * Math.PI / 180; return [r * Math.cos(a), r * Math.sin(a)]; };
+
+  function el(tag, attrs, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  svg.appendChild(el("circle", { r: R + 8, fill: "var(--rim)" }));
+  SEGMENTS.forEach((s, i) => {
+    const a0 = i * step, a1 = a0 + step;
+    const [x0, y0] = pt(a0, R), [x1, y1] = pt(a1, R);
+    svg.appendChild(el("path", {
+      d: `M0 0 L${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1} Z`,
+      fill: i % 2 ? "var(--seg-b)" : "var(--seg-a)", stroke: "#fff", "stroke-width": 1.5,
+    }));
+    const mid = a0 + step / 2, [tx, ty] = pt(mid, 64), [lx, ly] = pt(mid, 86);
+    const isDots = s.icon.startsWith("●");
+    svg.appendChild(el("text", {
+      x: tx, y: ty, "text-anchor": "middle", "dominant-baseline": "central",
+      "font-size": isDots ? 14 : 24, fill: "#c96a12", transform: `rotate(${mid} ${tx} ${ty})`,
+    }, s.icon));
+    svg.appendChild(el("text", {
+      x: lx, y: ly, "text-anchor": "middle", "dominant-baseline": "central",
+      "font-size": 8, "font-weight": 700, fill: "#5a3d10", transform: `rotate(${mid} ${lx} ${ly})`,
+    }, s.label));
+  });
+
+  // Joueurs
+  let count = 4, turn = 0;
+  const playersEl = document.getElementById("players");
+  function renderPlayers() {
+    playersEl.innerHTML = "";
+    PLAYERS.slice(0, count).forEach((p, i) => {
+      const d = document.createElement("div");
+      d.className = "player" + (i === turn ? " active" : "");
+      d.style.background = p.color;
+      d.textContent = "🐰 " + p.name;
+      playersEl.appendChild(d);
+    });
+  }
+  document.getElementById("count").addEventListener("change", e => {
+    count = +e.target.value; turn = 0; renderPlayers();
+  });
+  renderPlayers();
+
+  // Rotation : la flèche est en bas (180°).
+  let rotation = 0;
+  const btn = document.getElementById("spin"), result = document.getElementById("result");
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    const idx = Math.floor(Math.random() * n);
+    const jitter = (Math.random() - 0.5) * step * 0.7;
+    const target = 180 - (idx * step + step / 2) + jitter;
+    const current = ((rotation % 360) + 360) % 360;
+    let delta = ((target - current) % 360 + 360) % 360;
+    rotation += 360 * (4 + Math.floor(Math.random() * 3)) + delta;
+    svg.style.transform = `rotate(${rotation}deg)`;
+    result.innerHTML = `<div class="big">…</div><div class="hint">La roue tourne…</div>`;
+    setTimeout(() => {
+      const s = SEGMENTS[idx], p = PLAYERS[turn];
+      result.innerHTML = `<div class="big" style="color:${p.color}">${p.name} : ${s.big}</div><div class="hint">${s.hint}</div>`;
+      if (navigator.vibrate) navigator.vibrate(60);
+      turn = (turn + 1) % count;
+      renderPlayers();
+      btn.disabled = false;
+    }, 4300);
+  });
+</script>
+</body>
+</html>
