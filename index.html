@@ -50,6 +50,10 @@
     box-shadow: 0 4px 0 var(--accent-dark); touch-action: manipulation;
   }
   button:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--accent-dark); }
+  .controls { display: flex; align-items: center; gap: 12px; margin-top: 28px; }
+  .controls button { margin-top: 0; }
+  button.toggle { padding: 10px 14px; font-size: 1.4rem; background: var(--card); box-shadow: 0 4px 0 var(--muted); }
+  button.toggle:active { box-shadow: 0 1px 0 var(--muted); }
   button:disabled { opacity: .6; cursor: default; }
   .result {
     margin-top: 20px; min-height: 92px; width: 100%; max-width: 420px; background: var(--card);
@@ -77,7 +81,10 @@
     <div class="pointer"></div>
   </div>
 
-  <button id="spin">Tourner !</button>
+  <div class="controls">
+    <button id="spin">Tourner !</button>
+    <button id="sound" class="toggle" aria-pressed="true" aria-label="Couper le son">🔊</button>
+  </div>
 
   <div class="result" id="result" aria-live="polite">
     <div class="big">Prêts ?</div>
@@ -170,11 +177,93 @@
   });
   renderPlayers();
 
+  // Son et voix
+  let soundOn = true;
+  try { soundOn = localStorage.getItem("son") !== "off"; } catch (e) {}
+  const soundBtn = document.getElementById("sound");
+  function renderSound() {
+    soundBtn.textContent = soundOn ? "🔊" : "🔇";
+    soundBtn.setAttribute("aria-pressed", soundOn);
+    soundBtn.setAttribute("aria-label", soundOn ? "Couper le son" : "Activer le son");
+  }
+  soundBtn.addEventListener("click", () => {
+    soundOn = !soundOn;
+    try { localStorage.setItem("son", soundOn ? "on" : "off"); } catch (e) {}
+    if (!soundOn && window.speechSynthesis) speechSynthesis.cancel();
+    renderSound();
+  });
+  renderSound();
+
+  let audio = null;
+  function getAudio() {
+    if (!audio) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      audio = new Ctx();
+    }
+    if (audio.state === "suspended") audio.resume();
+    return audio;
+  }
+  function beep(freq, start, dur, vol, type) {
+    const ctx = getAudio();
+    if (!ctx || !soundOn) return;
+    const t = ctx.currentTime + start, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type || "sine";
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(ctx.destination);
+    o.start(t);
+    o.stop(t + dur);
+  }
+  const tick = () => beep(1500, 0, 0.04, 0.15, "square");
+  const ding = () => { beep(784, 0, 0.25, 0.25); beep(1047, 0.12, 0.4, 0.25); beep(1319, 0.24, 0.6, 0.2); };
+
+  let voice = null;
+  function pickVoice() {
+    if (!window.speechSynthesis) return;
+    const voices = speechSynthesis.getVoices();
+    voice = voices.find(v => v.lang === "fr-FR") || voices.find(v => v.lang.startsWith("fr")) || null;
+  }
+  if (window.speechSynthesis) {
+    pickVoice();
+    speechSynthesis.addEventListener("voiceschanged", pickVoice);
+  }
+  function say(text) {
+    if (!soundOn || !window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "fr-FR";
+    if (voice) u.voice = voice;
+    u.rate = 0.95;
+    u.pitch = 1.1;
+    speechSynthesis.speak(u);
+  }
+
+  // Un « tic » chaque fois qu'une case passe devant la flèche.
+  const caseUnderArrow = () => {
+    const m = new DOMMatrix(getComputedStyle(svg).transform);
+    const deg = Math.atan2(m.b, m.a) * 180 / Math.PI;
+    return Math.floor((((180 - deg) % 360) + 360) % 360 / step);
+  };
+  let spinning = false;
+  function watchTicks() {
+    let last = caseUnderArrow();
+    (function frame() {
+      if (!spinning) return;
+      const now = caseUnderArrow();
+      if (now !== last) { tick(); last = now; }
+      requestAnimationFrame(frame);
+    })();
+  }
+
   // Rotation : la flèche est en bas (180°).
   let rotation = 0;
   const btn = document.getElementById("spin"), result = document.getElementById("result");
   btn.addEventListener("click", () => {
     btn.disabled = true;
+    getAudio();
+    if (window.speechSynthesis) speechSynthesis.cancel();
     const idx = Math.floor(Math.random() * n);
     const jitter = (Math.random() - 0.5) * step * 0.7;
     const target = 180 - (idx * step + step / 2) + jitter;
@@ -182,11 +271,16 @@
     let delta = ((target - current) % 360 + 360) % 360;
     rotation += 360 * (4 + Math.floor(Math.random() * 3)) + delta;
     svg.style.transform = `rotate(${rotation}deg)`;
+    spinning = true;
+    watchTicks();
     result.innerHTML = `<div class="big">…</div><div class="hint">La roue tourne…</div>`;
     setTimeout(() => {
+      spinning = false;
       const s = SEGMENTS[idx], p = PLAYERS[turn];
       result.innerHTML = `<div class="big" style="color:${p.color}">${p.name} : ${s.big}</div><div class="hint">${s.hint}</div>`;
       if (navigator.vibrate) navigator.vibrate(60);
+      ding();
+      setTimeout(() => say(s.icon ? `${p.name}. ${s.hint}` : `${p.name}, ${s.big}`), 500);
       turn = (turn + 1) % count;
       renderPlayers();
       btn.disabled = false;
