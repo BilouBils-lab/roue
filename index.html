@@ -102,15 +102,15 @@
   // Cases de la roue, dans le sens des aiguilles d'une montre en partant du haut.
   // dots = nombre de ronds (cases à avancer), icon = action spéciale.
   const SEGMENTS = [
-    { dots: 2, label: "2 cases",  big: "Avance de 2 cases", hint: "Saute de deux cases avec un de tes lapins." },
-    { dots: 1, icon: "🪵", label: "1 case + planche", big: "1 case et une planche", hint: "Avance d'une case, puis déplace une planche sur le trou de ton choix." },
-    { dots: 3, label: "3 cases",  big: "Avance de 3 cases", hint: "Saute de trois cases avec un de tes lapins." },
-    { dots: 1, icon: "🌉", label: "1 case + pont", big: "1 case et le pont", hint: "Avance d'une case, puis déplace le pont suspendu sur l'autre pont cassé." },
-    { dots: 0, icon: "🐹", label: "Taupe", big: "La taupe !", hint: "La taupe pousse un lapin ! Suis la règle de la notice." },
+    { key: "2", dots: 2, label: "2 cases",  big: "Avance de 2 cases", hint: "Saute de deux cases avec un de tes lapins." },
+    { key: "planche", dots: 1, icon: "🪵", label: "1 case + planche", big: "1 case et une planche", hint: "Avance d'une case, puis déplace une planche sur le trou de ton choix." },
+    { key: "3", dots: 3, label: "3 cases",  big: "Avance de 3 cases", hint: "Saute de trois cases avec un de tes lapins." },
+    { key: "pont", dots: 1, icon: "🌉", label: "1 case + pont", big: "1 case et le pont", hint: "Avance d'une case, puis déplace le pont suspendu sur l'autre pont cassé." },
+    { key: "taupe", dots: 0, icon: "🐹", label: "Taupe", big: "La taupe !", hint: "La taupe pousse un lapin ! Suis la règle de la notice." },
   ];
   const PLAYERS = [
-    { name: "Jaune", color: "#e0b400" }, { name: "Rose", color: "#d6336c" },
-    { name: "Bleu", color: "#1c6fd6" },  { name: "Violet", color: "#7b2fb5" },
+    { key: "jaune", name: "Jaune", color: "#e0b400" }, { key: "rose", name: "Rose", color: "#d6336c" },
+    { key: "bleu", name: "Bleu", color: "#1c6fd6" },  { key: "violet", name: "Violet", color: "#7b2fb5" },
   ];
 
   const svg = document.getElementById("wheel");
@@ -189,7 +189,7 @@
   soundBtn.addEventListener("click", () => {
     soundOn = !soundOn;
     try { localStorage.setItem("son", soundOn ? "on" : "off"); } catch (e) {}
-    if (!soundOn && window.speechSynthesis) speechSynthesis.cancel();
+    if (!soundOn && clip) clip.pause();
     renderSound();
   });
   renderSound();
@@ -219,25 +219,13 @@
   const tick = () => beep(1500, 0, 0.04, 0.15, "square");
   const ding = () => { beep(784, 0, 0.25, 0.25); beep(1047, 0.12, 0.4, 0.25); beep(1319, 0.24, 0.6, 0.2); };
 
-  let voice = null;
-  function pickVoice() {
-    if (!window.speechSynthesis) return;
-    const voices = speechSynthesis.getVoices();
-    voice = voices.find(v => v.lang === "fr-FR") || voices.find(v => v.lang.startsWith("fr")) || null;
-  }
-  if (window.speechSynthesis) {
-    pickVoice();
-    speechSynthesis.addEventListener("voiceschanged", pickVoice);
-  }
-  function say(text) {
-    if (!soundOn || !window.speechSynthesis) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "fr-FR";
-    if (voice) u.voice = voice;
-    u.rate = 0.95;
-    u.pitch = 1.1;
-    speechSynthesis.speak(u);
+  // Annonces enregistrées à l'avance : sons/<joueur>-<case>.mp3
+  let clip = null;
+  function announce(p, s) {
+    if (clip) clip.pause();
+    if (!soundOn) return;
+    clip = new Audio(`sons/${p.key}-${s.key}.mp3`);
+    clip.play().catch(() => {});
   }
 
   // Un « tic » chaque fois qu'une case passe devant la flèche.
@@ -263,7 +251,7 @@
   btn.addEventListener("click", () => {
     btn.disabled = true;
     getAudio();
-    if (window.speechSynthesis) speechSynthesis.cancel();
+    if (clip) clip.pause();
     const idx = Math.floor(Math.random() * n);
     const jitter = (Math.random() - 0.5) * step * 0.7;
     const target = 180 - (idx * step + step / 2) + jitter;
@@ -280,7 +268,7 @@
       result.innerHTML = `<div class="big" style="color:${p.color}">${p.name} : ${s.big}</div><div class="hint">${s.hint}</div>`;
       if (navigator.vibrate) navigator.vibrate(60);
       ding();
-      setTimeout(() => say(s.icon ? `${p.name}. ${s.hint}` : `${p.name}, ${s.big}`), 500);
+      setTimeout(() => announce(p, s), 500);
       turn = (turn + 1) % count;
       renderPlayers();
       btn.disabled = false;
