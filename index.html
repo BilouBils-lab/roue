@@ -33,7 +33,7 @@
   h1 { margin: 8px 0 4px; font-size: 1.8rem; letter-spacing: .5px; }
   .sub { margin: 0 0 16px; color: var(--muted); text-align: center; }
   .wheel-wrap { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; }
-  #wheel { width: 100%; height: 100%; transition: transform 4.2s cubic-bezier(.17,.67,.12,1); }
+  #wheel { width: 100%; height: 100%; pointer-events: none; transition: transform 4.2s cubic-bezier(.17,.67,.12,1); }
   .pointer {
     position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
     width: 0; height: 0; border-left: 22px solid transparent; border-right: 22px solid transparent;
@@ -67,6 +67,9 @@
     border: 3px solid transparent;
   }
   .player.active { opacity: 1; border-color: var(--text); }
+  .rules { width: 100%; max-width: 420px; margin-top: 20px; background: var(--card); border-radius: 16px; padding: 12px 18px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .rules summary { cursor: pointer; font-weight: 700; }
+  .rules ul { margin: 10px 0 4px; padding-left: 20px; display: grid; gap: 6px; line-height: 1.4; }
   label.small { margin-top: 12px; color: var(--muted); font-size: .9rem; }
   select { font-size: .9rem; margin-left: 6px; }
 </style>
@@ -88,7 +91,7 @@
 
   <div class="result" id="result" aria-live="polite">
     <div class="big">Prêts ?</div>
-    <div class="hint">Le premier lapin qui atteint la carotte gagne.</div>
+    <div class="hint">Le premier lapin qui arrive à la carotte gagne.</div>
   </div>
 
   <label class="small">Joueurs
@@ -98,15 +101,26 @@
   </label>
   <div class="players" id="players"></div>
 
+  <details class="rules">
+    <summary>Rappel des règles</summary>
+    <ul>
+      <li>Chaque joueur a <strong>2 lapins</strong>, placés au pied des marches. Le plus jeune commence.</li>
+      <li>Il ne peut y avoir qu'<strong>un seul lapin par case</strong>. Les cases occupées sont sautées et ne comptent pas.</li>
+      <li>Un <strong>trou</strong> compte comme une case. Si tu termines ton déplacement pile dessus, ton lapin tombe et retourne au départ. Un trou couvert par une planche ne risque rien.</li>
+      <li>Le <strong>pont suspendu</strong> est un raccourci, même quand la taupe te fait reculer. Il ne compte pas comme une case.</li>
+      <li>Le gagnant est le premier qui arrive pile sur la <strong>carotte</strong> avec l'un de ses deux lapins.</li>
+    </ul>
+  </details>
+
 <script>
   // Cases de la roue, dans le sens des aiguilles d'une montre en partant du haut.
   // dots = nombre de ronds (cases à avancer), icon = action spéciale.
   const SEGMENTS = [
-    { key: "2", dots: 2, label: "2 cases",  big: "Avance de 2 cases", hint: "Saute de deux cases avec un de tes lapins." },
-    { key: "planche", dots: 1, icon: "🪵", label: "1 case + planche", big: "1 case et une planche", hint: "Avance d'une case, puis déplace une planche sur le trou de ton choix." },
-    { key: "3", dots: 3, label: "3 cases",  big: "Avance de 3 cases", hint: "Saute de trois cases avec un de tes lapins." },
-    { key: "pont", dots: 1, icon: "🌉", label: "1 case + pont", big: "1 case et le pont", hint: "Avance d'une case, puis déplace le pont suspendu sur l'autre pont cassé." },
-    { key: "taupe", dots: 0, icon: "🐹", label: "Taupe", big: "La taupe !", hint: "La taupe pousse un lapin ! Suis la règle de la notice." },
+    { key: "2", dots: 2, label: "2 cases", big: "Avance de 2 cases", hint: "Avance un de tes lapins de 2 cases." },
+    { key: "planche", dots: 1, icon: "🪵", label: "Planche", big: "Planche !", hint: "Déplace une planche sur un autre trou, ou avance un de tes lapins d'1 case. Si un lapin est sur chaque planche, tu dois avancer d'1 case." },
+    { key: "3", dots: 3, label: "3 cases", big: "Avance de 3 cases", hint: "Avance un de tes lapins de 3 cases." },
+    { key: "pont", dots: 1, icon: "🌉", label: "Pont", big: "Pont suspendu !", hint: "Déplace le pont suspendu sur l'autre pont cassé, ou avance un de tes lapins d'1 case." },
+    { key: "taupe", dots: 0, icon: "🐹", label: "Taupe", big: "La taupe !", hint: "Recule d'1 case un lapin adverse de ton choix." },
   ];
   const PLAYERS = [
     { key: "jaune", name: "Jaune", color: "#e0b400" }, { key: "rose", name: "Rose", color: "#d6336c" },
