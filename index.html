@@ -15,6 +15,8 @@
     --seg-a: #fbe27a;
     --seg-b: #f6d35a;
     --rim: #6b8f2a;
+    --dot: #f3c77a;
+    --dot-line: #c9984a;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -90,16 +92,14 @@
   <div class="players" id="players"></div>
 
 <script>
-  // Cases de la roue. Ajuste cette liste si ta roue est différente.
+  // Cases de la roue, dans le sens des aiguilles d'une montre en partant du haut.
+  // dots = nombre de ronds (cases à avancer), icon = action spéciale.
   const SEGMENTS = [
-    { icon: "●",       label: "1 case",    big: "Avance de 1 case",  hint: "Saute d'une case avec un de tes lapins." },
-    { icon: "🌉",      label: "Pont",      big: "Le pont suspendu !", hint: "Déplace le pont suspendu sur l'autre pont cassé." },
-    { icon: "●●",      label: "2 cases",   big: "Avance de 2 cases", hint: "Saute de deux cases avec un de tes lapins." },
-    { icon: "🐹",      label: "Taupe",     big: "La taupe !",        hint: "Attention, la taupe pousse un lapin… dans un trou ?" },
-    { icon: "●●●",     label: "3 cases",   big: "Avance de 3 cases", hint: "Saute de trois cases avec un de tes lapins." },
-    { icon: "🪵",      label: "Planches",  big: "Les planches !",    hint: "Déplace une planche pour boucher le trou de ton choix." },
-    { icon: "●",       label: "1 case",    big: "Avance de 1 case",  hint: "Saute d'une case avec un de tes lapins." },
-    { icon: "●●",      label: "2 cases",   big: "Avance de 2 cases", hint: "Saute de deux cases avec un de tes lapins." },
+    { dots: 2, label: "2 cases",  big: "Avance de 2 cases", hint: "Saute de deux cases avec un de tes lapins." },
+    { dots: 1, icon: "🪵", label: "1 case + planche", big: "1 case et une planche", hint: "Avance d'une case, puis déplace une planche sur le trou de ton choix." },
+    { dots: 3, label: "3 cases",  big: "Avance de 3 cases", hint: "Saute de trois cases avec un de tes lapins." },
+    { dots: 1, icon: "🌉", label: "1 case + pont", big: "1 case et le pont", hint: "Avance d'une case, puis déplace le pont suspendu sur l'autre pont cassé." },
+    { dots: 0, icon: "🐹", label: "Taupe", big: "La taupe !", hint: "La taupe pousse un lapin ! Suis la règle de la notice." },
   ];
   const PLAYERS = [
     { name: "Jaune", color: "#e0b400" }, { name: "Rose", color: "#d6336c" },
@@ -124,17 +124,31 @@
     const [x0, y0] = pt(a0, R), [x1, y1] = pt(a1, R);
     svg.appendChild(el("path", {
       d: `M0 0 L${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1} Z`,
-      fill: i % 2 ? "var(--seg-b)" : "var(--seg-a)", stroke: "#fff", "stroke-width": 1.5,
+      fill: "var(--seg-a)", stroke: "var(--dot-line)", "stroke-width": 1.5,
     }));
-    const mid = a0 + step / 2, [tx, ty] = pt(mid, 64), [lx, ly] = pt(mid, 86);
-    const isDots = s.icon.startsWith("●");
-    svg.appendChild(el("text", {
-      x: tx, y: ty, "text-anchor": "middle", "dominant-baseline": "central",
-      "font-size": isDots ? 14 : 24, fill: "#c96a12", transform: `rotate(${mid} ${tx} ${ty})`,
-    }, s.icon));
+    const mid = a0 + step / 2;
+    const dot = (deg, r) => {
+      const [x, y] = pt(deg, r);
+      svg.appendChild(el("circle", { cx: x, cy: y, r: 10, fill: "var(--dot)", stroke: "var(--dot-line)", "stroke-width": 1.5 }));
+    };
+    if (s.icon) {
+      if (s.dots) dot(mid, 34);
+      const [tx, ty] = pt(mid, s.dots ? 64 : 56);
+      svg.appendChild(el("text", {
+        x: tx, y: ty, "text-anchor": "middle", "dominant-baseline": "central",
+        "font-size": s.dots ? 26 : 34, transform: `rotate(${mid} ${tx} ${ty})`,
+      }, s.icon));
+    } else if (s.dots === 2) {
+      dot(mid, 40); dot(mid, 66);
+    } else if (s.dots === 3) {
+      dot(mid, 38); dot(mid - 11, 66); dot(mid + 11, 66);
+    } else if (s.dots === 1) {
+      dot(mid, 50);
+    }
+    const [lx, ly] = pt(mid, 89);
     svg.appendChild(el("text", {
       x: lx, y: ly, "text-anchor": "middle", "dominant-baseline": "central",
-      "font-size": 8, "font-weight": 700, fill: "#5a3d10", transform: `rotate(${mid} ${lx} ${ly})`,
+      "font-size": 7.5, "font-weight": 700, fill: "#5a3d10", transform: `rotate(${mid} ${lx} ${ly})`,
     }, s.label));
   });
 
